@@ -12,9 +12,8 @@ My goal is to provide a robust and easy-to-use starting point for developers in 
 
 ## 📺 Demonstration
 ## 📺 Demonstration
-<video src="media/Task%205%20final.webm" controls="controls" style="max-width: 100%;">
-</video>
-*ORB-SLAM3 running in Monocular mode on EuRoC MAV dataset.*
+[![Click to Watch](https://img.shields.io/badge/▶_Watch_Demo-blue?style=for-the-badge&logo=youtube)](media/Task%205%20final.webm)
+*ORB-SLAM3 running in Monocular mode on EuRoC MAV dataset. (Click badge to view)*
 
 If you find this work useful, please consider citing the original ORB-SLAM3 paper:
 
