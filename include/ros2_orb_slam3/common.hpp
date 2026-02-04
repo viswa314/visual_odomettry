@@ -26,6 +26,12 @@
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include "sensor_msgs/msg/image.hpp"
+#include <sensor_msgs/msg/point_cloud2.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <nav_msgs/msg/path.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2/LinearMath/Quaternion.h>
 using std::placeholders::_1; //* TODO why this is suggested in official tutorial
 
 // Include Eigen
@@ -69,7 +75,7 @@ class MonocularMode : public rclcpp::Node
         
         // Class internal variables
         std::string homeDir = "";
-        std::string packagePath = "ros2_test/src/ros2_orb_slam3/"; //! Change to match path to your workspace
+        std::string packagePath = "ros2_orb_slam3/"; //! Change to match path to your workspace
         std::string OPENCV_WINDOW = ""; // Set during initialization
         std::string nodeName = ""; // Name of this node
         std::string vocFilePath = ""; // Path to ORB vocabulary provided by DBoW2 package
@@ -86,6 +92,29 @@ class MonocularMode : public rclcpp::Node
         rclcpp::Publisher<std_msgs::msg::String>::SharedPtr configAck_publisher_;
         rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subImgMsg_subscription_;
         rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr subTimestepMsg_subscription_;
+
+        //* Publishers for SLAM output
+        rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_publisher_;
+        rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_publisher_;
+        rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_publisher_;
+        rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr map_points_publisher_;
+
+        //* Historical Path
+        nav_msgs::msg::Path trajectory_path_;
+        std::vector<geometry_msgs::msg::PoseStamped> raw_poses_; // Unscaled poses for live tuning
+        
+        //* TF broadcaster
+        std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+
+        //* Parameters
+        std::string map_frame_id_ = "map";
+        std::string camera_frame_id_ = "camera_link";
+        OnSetParametersCallbackHandle::SharedPtr parameter_callback_handle_;
+
+        //* Visual Scale and Extrinsics
+        double visual_scale_ = 1.0;
+        Eigen::Matrix3f R_bs_;
+        Eigen::Vector3f t_bs_;
 
         //* ORB_SLAM3 related variables
         ORB_SLAM3::System* pAgent; // pointer to a ORB SLAM3 object

@@ -1,8 +1,8 @@
 /*
 * Originally adapted from ORB-SLAM3: Examples/ROS/src/ros_mono.cc
-* Author: Azmyin Md. Kamal
+* Author: viswa
 * Version: 1.0
-* Date: 01/01/2024
+* Date: 31/01/2026
 * Compatible for ROS2 Humble
 */
 

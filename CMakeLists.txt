@@ -23,8 +23,13 @@ find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(OpenCV 4.2 REQUIRED)
 find_package(Eigen3 3.3.0 REQUIRED) # Matched with Sophus
+set(Pangolin_DIR "${PROJECT_SOURCE_DIR}/Pangolin/build")
 find_package(Pangolin REQUIRED)
 find_package(image_transport REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 
 # Header file locations [C++ node]
@@ -57,6 +62,10 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   OpenCV
   Eigen3
   Pangolin
+  geometry_msgs
+  nav_msgs
+  tf2
+  tf2_ros
 )
 
 #* ORB SLAM3 as a shared library
@@ -175,6 +184,11 @@ install(TARGETS mono_node_cpp orb_slam3_lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
   INCLUDES DESTINATION include/${PROJECT_NAME}
+)
+
+# Install launch and rviz files
+install(DIRECTORY launch rviz
+  DESTINATION share/${PROJECT_NAME}
 )
 
 # Tell downstream packages where to find the headers

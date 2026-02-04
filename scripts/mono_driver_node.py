@@ -4,8 +4,8 @@
 """
 Python node for the MonocularMode cpp node.
 
-Author: Azmyin Md. Kamal
-Date: 01/01/2024
+Author: viswa
+Date: 31/01/2026
 
 Requirements
 * Dataset must be configured in EuRoC MAV format
@@ -47,9 +47,12 @@ from rclpy.parameter import Parameter
 # from your_custom_msg_interface.msg import CustomMsg #* Note the camel caps convention
 
 # Import ROS2 message templates
-from sensor_msgs.msg import Image # http://wiki.ros.org/sensor_msgs
-from std_msgs.msg import String, Float64 # ROS2 string message template
-from cv_bridge import CvBridge, CvBridgeError # Library to convert image messages to numpy array
+from sensor_msgs.msg import Image 
+from std_msgs.msg import String, Float64 
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped
+from cv_bridge import CvBridge, CvBridgeError 
+import pandas as pd
 
 #* Class definition
 class MonoDriver(Node):
@@ -71,7 +74,15 @@ class MonoDriver(Node):
         print()
 
         # Global path definitions
-        self.home_dir = str(Path.home()) + "/ros2_test/src/ros2_orb_slam3" #! Change this to match path to your workspace
+        # Try to find the package directory dynamically
+        try:
+            package_path = ament_index_python.packages.get_package_share_directory('ros2_orb_slam3')
+            # Assuming the layout is .../install/ros2_orb_slam3/share/ros2_orb_slam3
+            # We want the root of the workspace or where TEST_DATASET is.
+            # In this case, TEST_DATASET seems to be in the root of the workspace.
+            self.home_dir = os.path.abspath(os.path.join(package_path, "../../../.."))
+        except ament_index_python.packages.PackageNotFoundError:
+            self.home_dir = "/home/viswa/task_01_visual_odometry" 
         self.parent_dir = "TEST_DATASET" #! Change or provide path to the parent directory where data for all image sequences are stored
         self.image_sequence_dir = self.home_dir + "/" + self.parent_dir + "/" + self.image_seq # Full path to the image sequence folder
 
@@ -129,6 +140,14 @@ class MonoDriver(Node):
         self.frame_count = 0 # Ensure we are consistent with the count number of the frame
         self.inference_time = [] # List to compute average time
 
+        # Ground truth related
+        self.gt_path_publisher = self.create_publisher(Path, "/mono_py_driver/gt_path", 10)
+        self.gt_path_msg = Path()
+        self.gt_path_msg.header.frame_id = "map"
+        self.gt_data = None
+        self.T_gt_start_inv = None # To store the inverse of the starting GT pose for alignment
+        self.load_ground_truth()
+
         print()
         print(f"MonoDriver initialized, attempting handshake with CPP node")
     # ****************************************************************************************
@@ -157,6 +176,53 @@ class MonoDriver(Node):
 
         return imgz_file_dir, imgz_file_list, time_list
     # ****************************************************************************************
+
+    # ****************************************************************************************
+    def load_ground_truth(self):
+        """
+            Loads ground truth data from EuRoC format CSV
+        """
+        gt_file = os.path.join(self.image_sequence_dir, "mav0", "state_groundtruth_estimate0", "data.csv")
+        if not os.path.exists(gt_file):
+            print(f"Ground truth file not found: {gt_file}")
+            return
+
+        print(f"Loading ground truth from: {gt_file}")
+        self.gt_data = pd.read_csv(gt_file, comment='#', header=None)
+        # 0: timestamp, 1-3: px,py,pz, 4-7: qw,qx,qy,qz
+        self.gt_data.columns = ['timestamp', 'px', 'py', 'pz', 'qw', 'qx', 'qy', 'qz'] + list(self.gt_data.columns[8:])
+        
+        # Convert timestamps to seconds (EuRoC is in ns)
+        self.gt_data['timestamp'] = self.gt_data['timestamp'] / 1e9
+
+    def get_relative_gt_pose(self, timestamp):
+        """
+            Returns the GT pose relative to the start frame
+        """
+        if self.gt_data is None:
+            return None
+
+        # Find closest GT pose to current timestamp
+        idx = (self.gt_data['timestamp'] - timestamp).abs().idxmin()
+        row = self.gt_data.iloc[idx]
+
+        # Construct transformation matrix T
+        from scipy.spatial.transform import Rotation as R
+        pos = np.array([row['px'], row['py'], row['pz']])
+        quat = [row['qx'], row['qy'], row['qz'], row['qw']] # scipy uses x,y,z,w
+        
+        rot = R.from_quat(quat).as_matrix()
+        T = np.eye(4)
+        T[:3, :3] = rot
+        T[:3, 3] = pos
+
+        # If this is the first frame, store its inverse for alignment
+        if self.T_gt_start_inv is None:
+            self.T_gt_start_inv = np.linalg.inv(T)
+
+        # Align: T_rel = T_start_inv * T_now
+        T_rel = self.T_gt_start_inv @ T
+        return T_rel
 
     # ****************************************************************************************
     def ack_callback(self, msg):
@@ -194,7 +260,7 @@ class MonoDriver(Node):
 
         # Path to this image
         img_look_up_path = self.imgz_seqz_dir  + imgz_name
-        timestep = float(imgz_name.split(".")[0]) # Kept if you use a custom message interface to also pass timestep value
+        timestep = float(imgz_name.split(".")[0]) / 1e9
         self.frame_id = self.frame_id + 1  
         #print(img_look_up_path)
         # print(f"Frame ID: {frame_id}")
@@ -210,6 +276,45 @@ class MonoDriver(Node):
             self.publish_img_msg_.publish(img_msg)
         except CvBridgeError as e:
             print(e)
+
+        # Ground Truth Publishing
+        gt_pose_mat = self.get_relative_gt_pose(timestep)
+        if gt_pose_mat is not None:
+            from scipy.spatial.transform import Rotation as R
+            gt_pose_msg = PoseStamped()
+            gt_pose_msg.header.stamp = self.get_clock().now().to_msg()
+            gt_pose_msg.header.frame_id = "map"
+            
+            # Alignment logic:
+            # EuRoC Body frame: Z-Forward, Y-Right, X-Up
+            # ROS frame: X-Forward, Y-Left, Z-Up
+            # We must map: Z_body -> X_ros, Y_body -> -Y_ros, X_body -> Z_ros
+            R_body_to_ros = np.array([
+                [0, 0, 1],
+                [0, -1, 0],
+                [1, 0, 0]
+            ])
+            
+            # Rotate GT translation and rotation into ROS frame
+            pos_ros = R_body_to_ros @ gt_pose_mat[:3, 3]
+            rot_ros = R_body_to_ros @ gt_pose_mat[:3, :3] @ R_body_to_ros.T
+            
+            # Position
+            gt_pose_msg.pose.position.x = pos_ros[0]
+            gt_pose_msg.pose.position.y = pos_ros[1]
+            gt_pose_msg.pose.position.z = pos_ros[2]
+            
+            # Orientation
+            quat = R.from_matrix(rot_ros).as_quat() # x,y,z,w
+            gt_pose_msg.pose.orientation.x = quat[0]
+            gt_pose_msg.pose.orientation.y = quat[1]
+            gt_pose_msg.pose.orientation.z = quat[2]
+            gt_pose_msg.pose.orientation.w = quat[3]
+            
+            self.gt_path_msg.poses.append(gt_pose_msg)
+            self.gt_path_msg.header.stamp = gt_pose_msg.header.stamp
+            self.gt_path_publisher.publish(self.gt_path_msg)
+
     # ****************************************************************************************
         
 

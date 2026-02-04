@@ -1,3 +1,29 @@
-README.md
-*.mp4
+# C++ Build Artifacts
+build/
+install/
+log/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# ORB-SLAM3 / ROS 2 Specific
+TEST_DATASET/
+CameraTrajectory.txt
+KeyFrameTrajectory.txt
+*.bag
+*.mcap
+
+# Dependencies (if source is included but shouldn't be tracked)
+# Pangolin/  # Uncomment if Pangolin shouldn't be tracked in this repo
+
+# Python
+__pycache__/
+*.pyc
+
+# IDEs
 .vscode/
+.idea/
+
+# OS
+.DS_Store
