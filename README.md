@@ -11,7 +11,7 @@ A ROS2 package for ORB SLAM3 V1.0, maintained by **viswa**. Focus is on native i
 My goal is to provide a robust and easy-to-use starting point for developers in using ORB SLAM3 framework in their ROS 2 projects. This package simplifies the integration of ORB SLAM3 with standard ROS 2 messaging and infrastructure.
 
 ## 📺 Demonstration
-![Visual Odometry Demo](media/demo.webm)
+![Visual Odometry Demo](media/Task%205%20final.webm)
 *ORB-SLAM3 running in Monocular mode on EuRoC MAV dataset.*
 
 If you find this work useful, please consider citing the original ORB-SLAM3 paper:
